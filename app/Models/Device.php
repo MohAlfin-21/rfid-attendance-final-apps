@@ -15,6 +15,7 @@ class Device extends Model
         'code',
         'name',
         'location',
+        'allowed_ip',
         'token_hash',
         'token_plain_encrypted',
         'is_active',

@@ -8,6 +8,7 @@ use App\Models\AbsenceRequest;
 use App\Models\Attendance;
 use App\Models\Classroom;
 use App\Models\Device;
+use App\Models\StudentFlag;
 use App\Models\User;
 use Carbon\Carbon;
 
@@ -51,10 +52,14 @@ class DashboardController extends Controller
         // Classrooms
         $totalClassrooms = Classroom::active()->count();
 
+        // Anomaly flags count (Inovasi 3)
+        $anomalyCount = StudentFlag::unresolved()->count();
+
         return view('admin.dashboard', compact(
             'totalStudents', 'presentCount', 'lateCount', 'absentToday',
             'devicesOnline', 'devices', 'deviceSnapshots',
-            'pendingRequests', 'recentAttendances', 'totalClassrooms', 'today'
+            'pendingRequests', 'recentAttendances', 'totalClassrooms', 'today',
+            'anomalyCount'
         ));
     }
 }

@@ -84,6 +84,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Extended profile for students (parent contact, etc.).
+     */
+    public function studentProfile(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(StudentProfile::class);
+    }
+
+    /**
      * Classrooms this user belongs to as a student (via pivot).
      */
     public function classrooms(): BelongsToMany

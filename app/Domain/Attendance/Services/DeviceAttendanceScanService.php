@@ -10,6 +10,7 @@ use App\Domain\Attendance\Enums\CheckMethod;
 use App\Domain\Attendance\Enums\CheckOutType;
 use App\Domain\Attendance\Enums\ScanRuleHit;
 use App\Domain\Devices\Enums\CardStatus;
+use App\Jobs\SendWhatsappNotification;
 use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Classroom;
@@ -264,7 +265,7 @@ class DeviceAttendanceScanService
         ]);
         $attendance->save();
 
-        return $this->persistResult(
+        $result = $this->persistResult(
             device: $device,
             uidNormalized: $uidNormalized,
             ruleHit: $isLate ? ScanRuleHit::CheckInLate : ScanRuleHit::CheckInOk,
@@ -276,6 +277,12 @@ class DeviceAttendanceScanService
             student: $studentIdentity,
             status: $targetStatus,
         );
+
+        // Dispatch WA notification to parent (queued, non-blocking).
+        // Gracefully skipped if FONNTE_TOKEN is not configured.
+        $this->dispatchWaCheckIn($student, $serverNow);
+
+        return $result;
     }
 
     protected function processCheckOut(
@@ -461,5 +468,31 @@ class DeviceAttendanceScanService
             'reader_uptime_ms' => $payload['reader_uptime_ms'] ?? null,
             'ip_address' => $payload['ip_address'] ?? null,
         ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    /**
+     * Dispatch a WhatsApp notification to the student's parent after check-in.
+     * Loads studentProfile relationship lazily to avoid extra query if WA is disabled.
+     */
+    protected function dispatchWaCheckIn(User $student, CarbonImmutable $serverNow): void
+    {
+        if (empty(config('services.fonnte.token'))) {
+            return; // WA not configured — skip silently
+        }
+
+        $student->loadMissing('studentProfile');
+        $parentPhone = $student->studentProfile?->parent_phone;
+
+        if (empty($parentPhone)) {
+            return;
+        }
+
+        $time       = $serverNow->setTimezone('Asia/Jakarta')->format('H:i');
+        $parentName = $student->studentProfile->parent_name ?? 'Orang Tua';
+        $message    = "Assalamu'alaikum, Yth. {$parentName}.\n"
+                    . "*{$student->name}* telah tiba di sekolah pukul {$time} WIB.\n"
+                    . "Terima kasih.\n— RFID Attendance System";
+
+        SendWhatsappNotification::dispatch($parentPhone, $message);
     }
 }

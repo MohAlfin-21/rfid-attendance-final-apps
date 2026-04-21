@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Domain\Devices\Services\CardEnrollmentSessionService;
 use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Classroom;
@@ -192,6 +193,45 @@ class DeviceApiTest extends TestCase
 
         $response->assertUnauthorized()
             ->assertJsonPath('message', 'Missing device token.');
+    }
+
+    public function test_device_can_register_card_when_enrollment_session_is_active(): void
+    {
+        [$device, $headers] = $this->makeDevice();
+        $student = User::factory()->student()->create([
+            'name' => 'Siswa Registrasi',
+            'username' => 'siswa.registrasi',
+            'email' => 'siswa.registrasi@example.test',
+            'nis' => '2026777',
+        ]);
+
+        app(CardEnrollmentSessionService::class)->start($device, $student, 99);
+
+        $this->withHeaders($headers)->getJson('/api/v1/devices/card-enrollment/pending')
+            ->assertOk()
+            ->assertJsonPath('active', true);
+
+        $response = $this->withHeaders($headers)->postJson('/api/v1/devices/card-enrollment/scan', [
+            'uid' => 'de ad-be:ef',
+            'firmware_version' => '1.0.1',
+            'wifi_rssi' => -55,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('code', 'card_registered')
+            ->assertJsonPath('uid', 'DEADBEEF')
+            ->assertJsonPath('user.id', $student->id);
+
+        $this->assertDatabaseHas('rfid_cards', [
+            'user_id' => $student->id,
+            'uid' => 'DEADBEEF',
+            'status' => 'active',
+        ]);
+
+        $this->withHeaders($headers)->getJson('/api/v1/devices/card-enrollment/pending')
+            ->assertOk()
+            ->assertJsonPath('active', false);
     }
 
     protected function makeDevice(array $overrides = []): array

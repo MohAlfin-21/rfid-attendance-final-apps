@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Models\Classroom;
+use App\Models\Device;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -15,7 +16,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['roles', 'classrooms']);
+        $query = User::with(['roles', 'classrooms', 'rfidCards', 'studentProfile']);
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
@@ -40,8 +41,9 @@ class UserController extends Controller
         $users = $query->latest()->paginate(15)->withQueryString();
         $roles = Role::all();
         $classrooms = Classroom::active()->orderBy('name')->get();
+        $devices = Device::query()->active()->orderBy('name')->get();
 
-        return view('admin.users.index', compact('users', 'roles', 'classrooms'));
+        return view('admin.users.index', compact('users', 'roles', 'classrooms', 'devices'));
     }
 
     public function create()
@@ -60,6 +62,8 @@ class UserController extends Controller
             'password' => 'required|string|min:8|confirmed',
             'role' => 'required|string|exists:roles,name',
             'is_active' => 'boolean',
+            'parent_name' => 'nullable|string|max:255',
+            'parent_phone' => 'nullable|string|max:20',
         ]);
 
         $user = User::create([
@@ -74,6 +78,16 @@ class UserController extends Controller
         ]);
 
         $user->assignRole($validated['role']);
+
+        if ($validated['role'] === 'student' || $request->has('parent_name')) {
+            $user->studentProfile()->updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'parent_name' => $validated['parent_name'] ?? null,
+                    'parent_phone' => $validated['parent_phone'] ?? null,
+                ]
+            );
+        }
 
         return redirect()->route('admin.users.index')->with('success', __('Pengguna :name berhasil ditambahkan.', ['name' => $user->name]));
     }
@@ -94,6 +108,8 @@ class UserController extends Controller
             'password' => 'nullable|string|min:8|confirmed',
             'role' => 'required|string|exists:roles,name',
             'is_active' => 'boolean',
+            'parent_name' => 'nullable|string|max:255',
+            'parent_phone' => 'nullable|string|max:20',
         ]);
 
         if ($user->hasRole('admin')) {
@@ -116,6 +132,16 @@ class UserController extends Controller
         }
 
         $user->syncRoles([$validated['role']]);
+
+        if ($validated['role'] === 'student' || $request->has('parent_name')) {
+            $user->studentProfile()->updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'parent_name' => $validated['parent_name'] ?? null,
+                    'parent_phone' => $validated['parent_phone'] ?? null,
+                ]
+            );
+        }
 
         return redirect()->route('admin.users.index')->with('success', __('Pengguna :name berhasil diperbarui.', ['name' => $user->name]));
     }

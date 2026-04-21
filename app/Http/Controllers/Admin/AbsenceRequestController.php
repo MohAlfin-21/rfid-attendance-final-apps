@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Domain\Absence\Enums\AbsenceRequestStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AbsenceRequest;
 use Illuminate\Http\RedirectResponse;

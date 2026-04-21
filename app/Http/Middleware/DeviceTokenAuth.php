@@ -26,6 +26,16 @@ class DeviceTokenAuth
             return $this->unauthorizedResponse('Invalid device token.', $request);
         }
 
+        // ── IP Whitelist check ───────────────────────
+        // $request->ip() is already reliable because TrustProxies is configured
+        // in AppServiceProvider to forward X-Forwarded-For correctly.
+        if (! $this->isIpAllowed($device, $request)) {
+            return response()->json([
+                'message'    => 'Request IP is not whitelisted for this device.',
+                'request_id' => $request->attributes->get('request_id'),
+            ], 403);
+        }
+
         $routeDevice = $request->route('device');
 
         if ($routeDevice instanceof Device && ! $routeDevice->is($device)) {
@@ -40,11 +50,39 @@ class DeviceTokenAuth
         return $next($request);
     }
 
+    // ──────────────────────────────────────────────
+    // Helpers
+    // ──────────────────────────────────────────────
+
+    /**
+     * Return true if the incoming IP is allowed for this device.
+     * If `allowed_ip` is null, any IP is allowed (backward-compatible).
+     */
+    protected function isIpAllowed(Device $device, Request $request): bool
+    {
+        if (empty($device->allowed_ip)) {
+            return true;
+        }
+
+        $incoming = $request->ip();
+
+        // Exact match
+        if ($incoming === $device->allowed_ip) {
+            return true;
+        }
+
+        // Allow comma-separated list of IPs (e.g. "192.168.1.0,10.0.0.1")
+        $whitelist = array_map('trim', explode(',', $device->allowed_ip));
+
+        return in_array($incoming, $whitelist, true);
+    }
+
     protected function unauthorizedResponse(string $message, Request $request): JsonResponse
     {
         return response()->json([
-            'message' => $message,
+            'message'    => $message,
             'request_id' => $request->attributes->get('request_id'),
         ], 401);
     }
 }
+

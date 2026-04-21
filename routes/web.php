@@ -2,11 +2,15 @@
 
 use App\Http\Controllers\Admin\AbsenceRequestController;
 use App\Http\Controllers\Admin\AttendanceController;
+use App\Http\Controllers\Admin\AttendanceAnalyticsController;
+use App\Http\Controllers\Admin\AttendanceExportController;
 use App\Http\Controllers\Admin\ClassroomController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DeviceController;
 use App\Http\Controllers\Admin\SystemSettingController;
+use App\Http\Controllers\Admin\UserCardController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\AbsenceRequestAttachmentController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Teacher\TeacherDashboardController;
@@ -28,14 +32,25 @@ Route::get('/dashboard', function () {
 
 Route::post('/locale', [LocaleController::class, 'update'])->name('locale.update');
 
+Route::middleware('auth')->get(
+    '/absence-requests/{absence_request}/attachment',
+    AbsenceRequestAttachmentController::class
+)->name('absence-requests.attachment');
+
 // ── Admin Panel ──────────────────────────────────
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('users/{user}/cards', [UserCardController::class, 'store'])->name('users.cards.store');
+    Route::post('users/{user}/cards/enrollment', [UserCardController::class, 'startEnrollment'])->name('users.cards.enrollment.start');
+    Route::get('users/{user}/cards/enrollment-status', [UserCardController::class, 'enrollmentStatus'])->name('users.cards.enrollment.status');
+    Route::delete('users/{user}/cards/enrollment-status', [UserCardController::class, 'cancelEnrollment'])->name('users.cards.enrollment.cancel');
     Route::resource('users', UserController::class)->except(['show']);
     Route::resource('classrooms', ClassroomController::class);
     Route::resource('devices', DeviceController::class);
     Route::get('attendances', [AttendanceController::class, 'index'])->name('attendances.index');
     Route::post('attendances/{attendance}/override', [AttendanceController::class, 'override'])->name('attendances.override');
+    Route::get('attendances/export', [AttendanceExportController::class, 'export'])->name('attendances.export');
+    Route::get('analytics', [AttendanceAnalyticsController::class, 'index'])->name('analytics.index');
     Route::get('absence-requests', [AbsenceRequestController::class, 'index'])->name('absence-requests.index');
     Route::get('absence-requests/{absence_request}', [AbsenceRequestController::class, 'show'])->name('absence-requests.show');
     Route::put('absence-requests/{absence_request}', [AbsenceRequestController::class, 'update'])->name('absence-requests.update');
@@ -67,6 +82,7 @@ Route::middleware(['auth', 'role:student'])->prefix('student')->name('student.')
     Route::get('/absence-requests', [StudentDashboardController::class, 'absenceRequestsIndex'])->name('absence-requests.index');
     Route::get('/absence-requests/create', [StudentDashboardController::class, 'absenceRequestsCreate'])->name('absence-requests.create');
     Route::post('/absence-requests', [StudentDashboardController::class, 'absenceRequestsStore'])->name('absence-requests.store');
+    Route::get('/leaderboard', [StudentDashboardController::class, 'leaderboard'])->name('leaderboard');
 });
 
 // ── Profile ──────────────────────────────────────

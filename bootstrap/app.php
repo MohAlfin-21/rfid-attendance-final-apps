@@ -1,5 +1,9 @@
 <?php
 
+use App\Console\Commands\CheckDeviceHealth;
+use App\Console\Commands\DetectAttendanceAnomalies;
+use App\Console\Commands\NotifyAbsentStudents;
+use App\Console\Commands\UpdateStudentStreaks;
 use App\Http\Middleware\DeviceTokenAuth;
 use App\Http\Middleware\RequestId;
 use App\Http\Middleware\SetLocale;
@@ -19,7 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(RequestId::class);
 
         $middleware->alias([
-            'role' => RoleMiddleware::class,
+            'role'         => RoleMiddleware::class,
             'device.token' => DeviceTokenAuth::class,
         ]);
 
@@ -29,4 +33,25 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
-    })->create();
+    })
+    ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
+        // ── Inovasi 8: Device Health Monitoring ─────────────────────────────
+        // Check every 5 minutes; send email alert if any device is offline >10 min.
+        $schedule->command(CheckDeviceHealth::class)->everyFiveMinutes();
+
+        // ── Inovasi 2: Notify absent students' parents via WhatsApp ─────────
+        // Run at 07:30 weekdays only — after check-in window typically closes.
+        $schedule->command(NotifyAbsentStudents::class)->weekdays()->at('07:30');
+
+        // ── Inovasi 3: Anomaly Detection ─────────────────────────────────────
+        // Run every Friday night so weekly patterns can be detected over Mon-Fri.
+        $schedule->command(DetectAttendanceAnomalies::class)->weekly()->fridays()->at('22:00');
+
+        // ── Inovasi 7: Streak Updates ────────────────────────────────────────
+        // Runs at 09:00 on weekdays — processes YESTERDAY's attendance so data
+        // is definitely complete. Using 09:00 instead of 08:00 avoids race
+        // conditions with late check-in windows or slow queue backlogs.
+        $schedule->command(UpdateStudentStreaks::class)->weekdays()->at('09:00');
+    })
+    ->create();
+

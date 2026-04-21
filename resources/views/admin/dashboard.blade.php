@@ -68,6 +68,18 @@
             <p class="text-2xl font-bold text-violet-600">{{ $pendingRequests }}</p>
             <p class="text-xs text-gray-500 mt-1">{{ __('Menunggu review') }}</p>
         </div>
+
+        {{-- Anomaly Flags Widget (Inovasi 3) --}}
+        <a href="{{ route('admin.analytics.index') }}" class="block bg-white rounded-xl border {{ ($anomalyCount ?? 0) > 0 ? 'border-orange-200 bg-orange-50' : 'border-gray-100' }} p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">{{ __('Anomali') }}</span>
+                <div class="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+                    <span class="text-lg">⚠️</span>
+                </div>
+            </div>
+            <p class="text-2xl font-bold {{ ($anomalyCount ?? 0) > 0 ? 'text-orange-600' : 'text-gray-400' }}">{{ $anomalyCount ?? 0 }}</p>
+            <p class="text-xs text-gray-500 mt-1">{{ __('Pola mencurigakan') }}</p>
+        </a>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

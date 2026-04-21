@@ -17,14 +17,15 @@ Edit file [esp8266-rfid-attendance.ino](/c:/IOT/RFID-attendance/hardware/esp8266
 ```cpp
 const char *WIFI_SSID = "GANTI_WIFI";
 const char *WIFI_PASSWORD = "GANTI_PASSWORD_WIFI";
-const char *API_BASE_URL = "http://192.168.1.10:8000/api/v1/devices";
+const char *API_BASE_URL = "https://contoh-subdomain.ngrok-free.app/api/v1/devices";
 const char *DEVICE_TOKEN = "GANTI_DEVICE_TOKEN_DARI_PANEL_ADMIN";
 ```
 
 Catatan penting:
 
 - Jangan gunakan `localhost` atau `127.0.0.1` pada `API_BASE_URL` karena ESP8266 akan menganggap itu sebagai dirinya sendiri.
-- Gunakan IP LAN komputer/server Laravel, contoh `http://192.168.1.10:8000/api/v1/devices`.
+- Jika memakai `ngrok-free.app`, aktifkan `#define API_USE_HTTPS 1` dan gunakan URL `https://...`, bukan `http://...`.
+- Gunakan IP LAN komputer/server Laravel untuk jaringan lokal, contoh `http://192.168.1.10:8000/api/v1/devices`.
 - `DEVICE_TOKEN` harus sama dengan token device di halaman admin perangkat.
 
 ## Endpoint Yang Dipakai Scanner

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Teacher;
 
 use App\Domain\Attendance\Enums\AttendanceStatus;
-use App\Domain\Devices\Services\DeviceHealthService;
 use App\Http\Controllers\Controller;
 use App\Models\AbsenceRequest;
 use App\Models\Attendance;
@@ -47,7 +46,7 @@ class TeacherDashboardController extends Controller
     public function classroom()
     {
         $classrooms = auth()->user()->homeroomClassrooms()
-            ->with(['students' => fn($q) => $q->withPivot('academic_year', 'semester', 'is_active')])
+            ->with(['students' => fn($q) => $q->withPivot('academic_year', 'semester', 'is_active')->with('studentProfile')])
             ->active()->get();
 
         return view('teacher.classroom', compact('classrooms'));

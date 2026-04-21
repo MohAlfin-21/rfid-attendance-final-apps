@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    // WhatsApp gateway via Fonnte (https://fonnte.com)
+    // Set FONNTE_TOKEN in .env to activate WA notifications.
+    'fonnte' => [
+        'token' => env('FONNTE_TOKEN'),
+    ],
+
 ];
+

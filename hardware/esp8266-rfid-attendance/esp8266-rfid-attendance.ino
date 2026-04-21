@@ -33,10 +33,10 @@ WiFiClient networkClient;
  * - GND      -> GND
  */
 
-const char *WIFI_SSID = "Kelas C - 5G";
+const char *WIFI_SSID = "Kelas C";
 const char *WIFI_PASSWORD = "polilipo";
 const char *API_BASE_URL = "http://192.168.43.6:8000/api/v1/devices";
-const char *DEVICE_TOKEN = "dev-1zvT5tzneuhvEIgQOcuF3f9v4HhRz4kBKLtrDYhN";
+const char *DEVICE_TOKEN = "dev-1zgGU9aSmzqWGABp9mQAzqllpxjKJwR6Y42OZSGw";
 const char *FIRMWARE_VERSION = "esp8266-mfrc522-1.0.0";
 
 constexpr uint8_t PIN_SS = D8;
@@ -111,6 +111,7 @@ void setup()
   WiFi.mode(WIFI_STA);
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
 #if API_USE_HTTPS
   networkClient.setInsecure();
@@ -178,7 +179,16 @@ void handleCardScan()
     return;
   }
 
-  ScanFeedback feedback = sendScan(uid);
+  bool enrollmentActive = false;
+
+  if (!fetchEnrollmentPending(enrollmentActive))
+  {
+    signalError("Gagal cek mode registrasi kartu");
+    rememberScan(uid);
+    return;
+  }
+
+  ScanFeedback feedback = enrollmentActive ? sendEnrollmentScan(uid) : sendScan(uid);
   rememberScan(uid);
   showScanFeedback(feedback);
 }
@@ -312,6 +322,12 @@ void syncSettings()
     return;
   }
 
+  if (!isSuccessfulHttpStatus(httpCode))
+  {
+    logUnexpectedHttpResponse("SETTINGS", httpCode, responseBody);
+    return;
+  }
+
   DynamicJsonDocument responseDoc(1536);
   DeserializationError error = deserializeJson(responseDoc, responseBody);
 
@@ -361,6 +377,12 @@ void sendHeartbeat()
     return;
   }
 
+  if (!isSuccessfulHttpStatus(httpCode))
+  {
+    logUnexpectedHttpResponse("HEARTBEAT", httpCode, responseBody);
+    return;
+  }
+
   DynamicJsonDocument responseDoc(768);
   DeserializationError error = deserializeJson(responseDoc, responseBody);
 
@@ -372,6 +394,45 @@ void sendHeartbeat()
 
   lastHeartbeatAt = millis();
   Serial.printf("[HEARTBEAT] OK http=%d next=%lus\n", httpCode, runtimeSettings.heartbeatIntervalMs / 1000UL);
+}
+
+bool fetchEnrollmentPending(bool &active)
+{
+  active = false;
+
+  String responseBody;
+  int httpCode = 0;
+
+  if (!sendGet("/card-enrollment/pending", responseBody, httpCode))
+  {
+    Serial.println(F("[ENROLL] Gagal mengecek sesi registrasi"));
+    return false;
+  }
+
+  if (!isSuccessfulHttpStatus(httpCode))
+  {
+    logUnexpectedHttpResponse("ENROLL", httpCode, responseBody);
+    return false;
+  }
+
+  DynamicJsonDocument responseDoc(768);
+  DeserializationError error = deserializeJson(responseDoc, responseBody);
+
+  if (error)
+  {
+    Serial.printf("[ENROLL] Invalid JSON: %s\n", error.c_str());
+    return false;
+  }
+
+  active = responseDoc["active"] | false;
+
+  if (active)
+  {
+    const char *message = responseDoc["message"] | "Sesi registrasi kartu aktif";
+    Serial.printf("[ENROLL] %s\n", message);
+  }
+
+  return true;
 }
 
 ScanFeedback sendScan(const String &uid)
@@ -430,6 +491,59 @@ ScanFeedback sendScan(const String &uid)
   return feedback;
 }
 
+ScanFeedback sendEnrollmentScan(const String &uid)
+{
+  ScanFeedback feedback;
+
+  StaticJsonDocument<256> payloadDoc;
+  payloadDoc["uid"] = uid;
+  payloadDoc["firmware_version"] = FIRMWARE_VERSION;
+  payloadDoc["wifi_rssi"] = WiFi.RSSI();
+  payloadDoc["free_heap"] = ESP.getFreeHeap();
+  payloadDoc["reader_uptime_ms"] = millis();
+  payloadDoc["ip_address"] = WiFi.localIP().toString();
+
+  String payload;
+  serializeJson(payloadDoc, payload);
+
+  String responseBody;
+  int httpCode = 0;
+
+  if (!sendPost("/card-enrollment/scan", payload, responseBody, httpCode))
+  {
+    feedback.code = "network_error";
+    feedback.message = "Gagal menghubungi API registrasi kartu";
+    return feedback;
+  }
+
+  DynamicJsonDocument responseDoc(1536);
+  DeserializationError error = deserializeJson(responseDoc, responseBody);
+
+  if (error)
+  {
+    feedback.code = "invalid_json";
+    feedback.message = "Respons server registrasi tidak valid";
+    Serial.printf("[ENROLL] Invalid JSON: %s\n", error.c_str());
+    return feedback;
+  }
+
+  feedback.ok = responseDoc["ok"] | false;
+  feedback.result = (const char *)(responseDoc["result"] | "error");
+  feedback.code = (const char *)(responseDoc["code"] | "unknown");
+  feedback.message = (const char *)(responseDoc["message"] | "Tanpa pesan");
+  feedback.studentName = (const char *)(responseDoc["user"]["name"] | "");
+
+  Serial.printf(
+      "[ENROLL] http=%d result=%s code=%s message=%s user=%s\n",
+      httpCode,
+      feedback.result.c_str(),
+      feedback.code.c_str(),
+      feedback.message.c_str(),
+      feedback.studentName.c_str());
+
+  return feedback;
+}
+
 bool sendGet(const String &path, String &responseBody, int &httpCode)
 {
   return performHttpRequest("GET", path, "", responseBody, httpCode);
@@ -459,14 +573,21 @@ bool performHttpRequest(
     HTTPClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
     http.useHTTP10(true);
-    http.begin(networkClient, url);
-    http.addHeader("Accept", "application/json");
-    http.addHeader("X-Device-Token", DEVICE_TOKEN);
-    http.addHeader("X-Request-Id", buildRequestId());
-    
-    // Bypass Ngrok Free Warning Screen
-    http.addHeader("ngrok-skip-browser-warning", "69420");
 
+    if (!http.begin(networkClient, url))
+    {
+      Serial.printf("[HTTP] %s %s failed on attempt %u: unable to begin request\n",
+                    method.c_str(),
+                    url.c_str(),
+                    attempt);
+      delay(250 * attempt);
+      yield();
+      continue;
+    }
+
+    http.addHeader("Accept", "application/json");
+    http.addHeader("X-Device-Token", normalizedDeviceToken());
+    http.addHeader("X-Request-Id", buildRequestId());
     if (method == "POST")
     {
       http.addHeader("Content-Type", "application/json");
@@ -540,6 +661,30 @@ String buildRequestId()
   requestId += '-';
   requestId += String(millis());
   return requestId;
+}
+
+String normalizedDeviceToken()
+{
+  String token = DEVICE_TOKEN;
+  token.trim();
+  return token;
+}
+
+bool isSuccessfulHttpStatus(int httpCode)
+{
+  return httpCode >= 200 && httpCode < 300;
+}
+
+void logUnexpectedHttpResponse(const char *scope, int httpCode, const String &responseBody)
+{
+  Serial.printf("[%s] HTTP %d\n", scope, httpCode);
+
+  if (responseBody.length() == 0)
+  {
+    return;
+  }
+
+  Serial.printf("[%s] Body: %s\n", scope, responseBody.c_str());
 }
 
 void showScanFeedback(const ScanFeedback &feedback)

@@ -3,14 +3,15 @@
 namespace App\Http\Controllers\Student;
 
 use App\Domain\Absence\Enums\AbsenceRequestStatus;
-use App\Domain\Absence\Enums\AbsenceRequestType;
 use App\Domain\Attendance\Enums\AttendanceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AbsenceRequest;
 use App\Models\Attendance;
+use App\Models\StudentStreak;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class StudentDashboardController extends Controller
 {
@@ -89,12 +90,16 @@ class StudentDashboardController extends Controller
             'date_start' => 'required|date|after_or_equal:today',
             'date_end' => 'required|date|after_or_equal:date_start',
             'reason' => 'required|string|max:1000',
-            'attachment' => 'nullable|image|mimes:png,jpg,jpeg|max:2048',
+            'attachment' => 'nullable|file|mimes:png,jpg,jpeg,pdf|max:5120',
         ]);
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
-            $attachmentPath = $request->file('attachment')->store('absence-attachments', 'public');
+            $file = $request->file('attachment');
+            $folder = sprintf('absence-attachments/user-%s/%s', auth()->id(), now()->format('Y/m'));
+            $filename = now()->format('YmdHis') . '-' . Str::random(10) . '.' . $file->extension();
+
+            $attachmentPath = $file->storeAs($folder, $filename, 'public');
         }
 
         AbsenceRequest::create([
@@ -109,5 +114,28 @@ class StudentDashboardController extends Controller
 
         return redirect()->route('student.absence-requests.index')
             ->with('success', 'Permohonan izin berhasil dikirim. Menunggu persetujuan.');
+    }
+
+    public function leaderboard()
+    {
+        $user      = auth()->user();
+        $classroom = $user->classrooms()->where('classrooms.is_active', true)->first();
+
+        $topStreaks = StudentStreak::with('user')
+            ->when($classroom, function ($q) use ($classroom) {
+                $q->whereHas('user', fn ($u) => $u->whereHas('classrooms',
+                    fn ($c) => $c->where('classrooms.id', $classroom->id)
+                ));
+            })
+            ->orderByDesc('current_streak')
+            ->take(20)
+            ->get();
+
+        $myStreak = StudentStreak::firstOrCreate(
+            ['user_id' => $user->id],
+            ['current_streak' => 0, 'longest_streak' => 0, 'total_points' => 0]
+        );
+
+        return view('student.leaderboard', compact('topStreaks', 'myStreak', 'classroom'));
     }
 }
