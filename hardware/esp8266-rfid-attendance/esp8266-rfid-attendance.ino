@@ -33,10 +33,15 @@ WiFiClient networkClient;
  * - GND      -> GND
  */
 
-const char *WIFI_SSID = "Kelas C";
-const char *WIFI_PASSWORD = "polilipo";
-const char *API_BASE_URL = "http://192.168.43.6:8000/api/v1/devices";
-const char *DEVICE_TOKEN = "dev-1zgGU9aSmzqWGABp9mQAzqllpxjKJwR6Y42OZSGw";
+// Credentials loaded from secrets.h (gitignored).
+// Copy hardware/esp8266-rfid-attendance/secrets.h.example → secrets.h
+// and fill in your real values before compiling.
+#include "secrets.h"
+
+const char *WIFI_SSID     = SECRETS_WIFI_SSID;
+const char *WIFI_PASSWORD = SECRETS_WIFI_PASSWORD;
+const char *API_BASE_URL  = SECRETS_API_BASE_URL;
+const char *DEVICE_TOKEN  = SECRETS_DEVICE_TOKEN;
 const char *FIRMWARE_VERSION = "esp8266-mfrc522-1.0.0";
 
 constexpr uint8_t PIN_SS = D8;

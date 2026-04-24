@@ -23,3 +23,6 @@ yarn-error.log
 /.zed
 *.exe
 ngrok.exe
+
+# Hardware credentials — JANGAN pernah commit!
+hardware/**/secrets.h
